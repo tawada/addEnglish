@@ -17,8 +17,11 @@ function isJapanese(text) {
 async function translateJapaneseComment(text) {
     try {
         const res = await translate(text, {from: 'ja', to: 'en'});
+        console.log('[DEBUG] input:', text, 'output:', res.text);
         return res.text;
     } catch (e) {
+        console.error('[ERROR] Translation failed:', text);
+        console.error(e);
         return `English: ${text.trim()}`;
     }
 }
@@ -26,6 +29,8 @@ async function processPython(lines) {
     let result = [];
     let inDocstring = false;
     let docstringDelim = '';
+    let commentBuffer = [];
+    let commentIndent = '';
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const docstringMatch = line.match(/^(\s*)(["']{3})/);
@@ -34,33 +39,57 @@ async function processPython(lines) {
             if (!inDocstring) {
                 inDocstring = true;
                 docstringDelim = delim;
+                docstringBuffer = [line];
+                docstringIndent = docstringMatch[1] || '';
+                continue;
             } else {
                 inDocstring = false;
-                docstringDelim = '';
+                docstringBuffer.push(line);
+                // 複数行docstring全体をまとめて翻訳
+                const jpLines = docstringBuffer.slice(1, -1).map(l => l.trim()).join('\n');
+                let en = '';
+                if (jpLines && jpLines.split('').some(isJapanese)) {
+                    en = await translateJapaneseComment(jpLines);
+                }
+                result.push(...docstringBuffer);
+                if (en) {
+                    result.push(`${docstringIndent}${docstringDelim} ${en.split('\n').join(' ')}`);
+                }
+                docstringBuffer = [];
+                continue;
             }
-            result.push(line);
-            continue;
         }
         if (inDocstring) {
-            if (isJapanese(line)) {
-                result.push(line);
-                const indent = line.match(/^(\s*)/)[1] || '';
-                const t = await translateJapaneseComment(line.trim());
-                result.push(`${indent}${docstringDelim} ${t}`);
-            } else {
-                result.push(line);
-            }
+            docstringBuffer.push(line);
             continue;
         }
-        const m = line.match(PY_LINE_COMMENT);
+        // 連続する日本語行コメントをまとめる
+        const m = PY_LINE_COMMENT.match(line);
         if (m && isJapanese(m[1])) {
-            result.push(line);
-            const indent = m[1].match(/^(\s*)/) ? m[1].match(/^(\s*)/)[1] : '';
-            const t = await translateJapaneseComment(m[1].trim());
-            result.push(`${m[1].replace(/[^\s].*$/, '')}# ${t}`);
+            if (commentBuffer.length === 0) {
+                commentIndent = m[1].match(/^(\s*)/) ? m[1].match(/^(\s*)/)[1] : '';
+            }
+            commentBuffer.push({line, text: m[1]});
+            // 次の行も日本語コメントならバッファに溜める
+            continue;
         } else {
+            // バッファに溜まっていたらまとめて英訳
+            if (commentBuffer.length > 0) {
+                for (const c of commentBuffer) result.push(c.line);
+                const joined = commentBuffer.map(c => c.text.trim()).join(' ');
+                const t = await translateJapaneseComment(joined);
+                result.push(`${commentIndent}# ${t}`);
+                commentBuffer = [];
+            }
             result.push(line);
         }
+    }
+    // ファイル末尾にバッファが残っていた場合
+    if (commentBuffer.length > 0) {
+        for (const c of commentBuffer) result.push(c.line);
+        const joined = commentBuffer.map(c => c.text.trim()).join(' ');
+        const t = await translateJapaneseComment(joined);
+        result.push(`${commentIndent}# ${t}`);
     }
     return result;
 }
@@ -68,38 +97,62 @@ async function processPython(lines) {
 async function processJavaScript(lines) {
     let result = [];
     let inBlock = false;
+    let blockBuffer = [];
+    let blockIndent = '';
+    let commentBuffer = [];
+    let commentIndent = '';
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line.includes('/*')) {
             inBlock = true;
-            result.push(line);
+            blockBuffer = [line];
+            blockIndent = line.match(/^(\s*)/)[1] || '';
             continue;
         }
         if (line.includes('*/') && inBlock) {
             inBlock = false;
-            result.push(line);
+            blockBuffer.push(line);
+            // 複数行ブロックコメント全体をまとめて翻訳
+            const jpLines = blockBuffer.slice(1, -1).map(l => l.trim()).join('\n');
+            let en = '';
+            if (jpLines && jpLines.split('').some(isJapanese)) {
+                en = await translateJapaneseComment(jpLines);
+            }
+            result.push(...blockBuffer);
+            if (en) {
+                result.push(`${blockIndent}// ${en.split('\n').join(' ')}`);
+            }
+            blockBuffer = [];
             continue;
         }
         if (inBlock) {
-            if (isJapanese(line)) {
-                result.push(line);
-                const indent = line.match(/^(\s*)/)[1] || '';
-                const t = await translateJapaneseComment(line.trim());
-                result.push(`${indent}// ${t}`);
-            } else {
-                result.push(line);
-            }
+            blockBuffer.push(line);
             continue;
         }
+        // 連続する日本語行コメントをまとめる
         const m = line.match(/^(\s*)\/\/(.*)/);
         if (m && isJapanese(m[2])) {
-            result.push(line);
-            const indent = m[1] || '';
-            const t = await translateJapaneseComment(m[2].trim());
-            result.push(`${indent}// ${t}`);
+            if (commentBuffer.length === 0) {
+                commentIndent = m[1] || '';
+            }
+            commentBuffer.push({line, text: m[2]});
+            continue;
         } else {
+            if (commentBuffer.length > 0) {
+                for (const c of commentBuffer) result.push(c.line);
+                const joined = commentBuffer.map(c => c.text.trim()).join(' ');
+                const t = await translateJapaneseComment(joined);
+                result.push(`${commentIndent}// ${t}`);
+                commentBuffer = [];
+            }
             result.push(line);
         }
+    }
+    if (commentBuffer.length > 0) {
+        for (const c of commentBuffer) result.push(c.line);
+        const joined = commentBuffer.map(c => c.text.trim()).join(' ');
+        const t = await translateJapaneseComment(joined);
+        result.push(`${commentIndent}// ${t}`);
     }
     return result;
 }
