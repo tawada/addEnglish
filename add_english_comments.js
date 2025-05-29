@@ -44,8 +44,9 @@ async function processPython(lines) {
         if (inDocstring) {
             if (isJapanese(line)) {
                 result.push(line);
-                const t = await translateJapaneseComment(line);
-                result.push(`${docstringDelim} ${t}`);
+                const indent = line.match(/^(\s*)/)[1] || '';
+                const t = await translateJapaneseComment(line.trim());
+                result.push(`${indent}${docstringDelim} ${t}`);
             } else {
                 result.push(line);
             }
@@ -54,8 +55,9 @@ async function processPython(lines) {
         const m = line.match(PY_LINE_COMMENT);
         if (m && isJapanese(m[1])) {
             result.push(line);
-            const t = await translateJapaneseComment(m[1]);
-            result.push(`# ${t}`);
+            const indent = m[1].match(/^(\s*)/) ? m[1].match(/^(\s*)/)[1] : '';
+            const t = await translateJapaneseComment(m[1].trim());
+            result.push(`${m[1].replace(/[^\s].*$/, '')}# ${t}`);
         } else {
             result.push(line);
         }
@@ -81,18 +83,20 @@ async function processJavaScript(lines) {
         if (inBlock) {
             if (isJapanese(line)) {
                 result.push(line);
-                const t = await translateJapaneseComment(line);
-                result.push(`// ${t}`);
+                const indent = line.match(/^(\s*)/)[1] || '';
+                const t = await translateJapaneseComment(line.trim());
+                result.push(`${indent}// ${t}`);
             } else {
                 result.push(line);
             }
             continue;
         }
-        const m = line.match(/^\s*\/\/(.*)/);
-        if (m && isJapanese(m[1])) {
+        const m = line.match(/^(\s*)\/\/(.*)/);
+        if (m && isJapanese(m[2])) {
             result.push(line);
-            const t = await translateJapaneseComment(m[1]);
-            result.push(`// ${t}`);
+            const indent = m[1] || '';
+            const t = await translateJapaneseComment(m[2].trim());
+            result.push(`${indent}// ${t}`);
         } else {
             result.push(line);
         }
