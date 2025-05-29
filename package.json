@@ -10,5 +10,8 @@
     "add-english-comments": "node add_english_comments.js"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@vitalets/google-translate-api": "^9.2.1"
+  }
 }

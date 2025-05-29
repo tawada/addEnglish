@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const translate = require('@vitalets/google-translate-api').translate;
 
 const JP_CHAR_PATTERN = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]/;
 const PY_LINE_COMMENT = /^\s*#(.*)/;
@@ -13,10 +14,15 @@ const JS_LINE_COMMENT = /^\s*\/(\/)(.*)/;
 function isJapanese(text) {
     return JP_CHAR_PATTERN.test(text);
 }
-function translateDummy(text) {
-    return `English: ${text.trim()}`;
+async function translateJapaneseComment(text) {
+    try {
+        const res = await translate(text, {from: 'ja', to: 'en'});
+        return res.text;
+    } catch (e) {
+        return `English: ${text.trim()}`;
+    }
 }
-function processPython(lines) {
+async function processPython(lines) {
     let result = [];
     let inDocstring = false;
     let docstringDelim = '';
@@ -38,7 +44,8 @@ function processPython(lines) {
         if (inDocstring) {
             if (isJapanese(line)) {
                 result.push(line);
-                result.push(`${docstringDelim} ${translateDummy(line)}`);
+                const t = await translateJapaneseComment(line);
+                result.push(`${docstringDelim} ${t}`);
             } else {
                 result.push(line);
             }
@@ -47,14 +54,16 @@ function processPython(lines) {
         const m = line.match(PY_LINE_COMMENT);
         if (m && isJapanese(m[1])) {
             result.push(line);
-            result.push(`# ${translateDummy(m[1])}`);
+            const t = await translateJapaneseComment(m[1]);
+            result.push(`# ${t}`);
         } else {
             result.push(line);
         }
     }
     return result;
 }
-function processJavaScript(lines) {
+
+async function processJavaScript(lines) {
     let result = [];
     let inBlock = false;
     for (let i = 0; i < lines.length; i++) {
@@ -72,7 +81,8 @@ function processJavaScript(lines) {
         if (inBlock) {
             if (isJapanese(line)) {
                 result.push(line);
-                result.push(`// ${translateDummy(line)}`);
+                const t = await translateJapaneseComment(line);
+                result.push(`// ${t}`);
             } else {
                 result.push(line);
             }
@@ -81,20 +91,22 @@ function processJavaScript(lines) {
         const m = line.match(/^\s*\/\/(.*)/);
         if (m && isJapanese(m[1])) {
             result.push(line);
-            result.push(`// ${translateDummy(m[1])}`);
+            const t = await translateJapaneseComment(m[1]);
+            result.push(`// ${t}`);
         } else {
             result.push(line);
         }
     }
     return result;
 }
+
 function detectLanguage(filename) {
     const ext = path.extname(filename).toLowerCase();
     if (ext === '.py') return 'python';
     if (['.js', '.jsx', '.ts', '.tsx'].includes(ext)) return 'javascript';
     return null;
 }
-function main() {
+async function main() {
     if (process.argv.length < 3) {
         console.log('Usage: node add_english_comments.js <sourcefile>');
         process.exit(1);
@@ -108,9 +120,9 @@ function main() {
     const lines = fs.readFileSync(filename, 'utf8').split(/\r?\n/);
     let newLines;
     if (lang === 'python') {
-        newLines = processPython(lines);
+        newLines = await processPython(lines);
     } else {
-        newLines = processJavaScript(lines);
+        newLines = await processJavaScript(lines);
     }
     const outname = filename + '.encommented';
     fs.writeFileSync(outname, newLines.join('\n'), 'utf8');
