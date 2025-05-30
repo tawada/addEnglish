@@ -29,6 +29,8 @@ async function processPython(lines) {
     let result = [];
     let inDocstring = false;
     let docstringDelim = '';
+    let docstringBuffer = [];
+    let docstringIndent = '';
     let commentBuffer = [];
     let commentIndent = '';
     for (let i = 0; i < lines.length; i++) {
@@ -53,7 +55,8 @@ async function processPython(lines) {
                 }
                 result.push(...docstringBuffer);
                 if (en) {
-                    result.push(`${docstringIndent}${docstringDelim} ${en.split('\n').join(' ')}`);
+                    // 英語コメントもdocstring形式で閉じる
+                    result.push(`${docstringIndent}${docstringDelim} ${en} ${docstringDelim}`);
                 }
                 docstringBuffer = [];
                 continue;
@@ -64,10 +67,10 @@ async function processPython(lines) {
             continue;
         }
         // 連続する日本語行コメントをまとめる
-        const m = PY_LINE_COMMENT.match(line);
+        const m = line.match(PY_LINE_COMMENT);
         if (m && isJapanese(m[1])) {
             if (commentBuffer.length === 0) {
-                commentIndent = m[1].match(/^(\s*)/) ? m[1].match(/^(\s*)/)[1] : '';
+                commentIndent = line.match(/^(\s*)/)[1] || '';
             }
             commentBuffer.push({line, text: m[1]});
             // 次の行も日本語コメントならバッファに溜める

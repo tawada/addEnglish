@@ -1,5 +1,13 @@
 const fs = require('fs');
 const { execSync } = require('child_process');
+const path = require('path');
+const glob = require('glob');
+
+// テスト前に*.encommentedファイルを削除
+const encommentedFiles = glob.sync(path.join(__dirname, '../*.encommented'));
+encommentedFiles.forEach(f => {
+    try { fs.unlinkSync(f); } catch (e) { /* ignore */ }
+});
 
 function runTest(src, ext) {
     const srcFile = `../test_sample.${ext}`;
