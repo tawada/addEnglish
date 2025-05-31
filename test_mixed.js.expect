@@ -1,0 +1,14 @@
+// 日本語コメント
+// Japanese comments
+// English comment
+/*
+日本語ブロック
+English block
+*/
+// Japanese block English block
+function bar() {
+    const s = '// 日本語とEnglish混在 //';
+    // 日本語とEnglish混在
+    // Mixed Japanese and English
+    return s;
+}
