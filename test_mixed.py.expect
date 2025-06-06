@@ -1,0 +1,14 @@
+# 日本語コメント
+# Japanese comments
+# English comment
+"""
+日本語docstring
+English docstring
+"""
+""" Japanese docstring
+English docstring """
+def bar():
+    s = '# 日本語とEnglish混在 #'
+    # 日本語とEnglish混在
+    # Mixed Japanese and English
+    return s
